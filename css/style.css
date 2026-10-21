@@ -195,4 +195,25 @@ footer {
         margin: 0 auto 15px;
     }
     
+    /* Enlaces a documentos legales */
+    .enlaces-legales {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+        font-size: 13px;
+    }
+
+    .enlaces-legales a {
+        color: #2563eb;
+        text-decoration: none;
+    }
+
+    .enlaces-legales a:hover,
+    .enlaces-legales a:focus-visible {
+        text-decoration: underline;
+    }
+
 }

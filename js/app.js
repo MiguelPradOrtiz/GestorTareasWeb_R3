@@ -8,13 +8,26 @@ const pendientes = document.getElementById("pendientes");
 const completadas = document.getElementById("completadas");
 const botonesFiltro = document.querySelectorAll(".filtro");
 
-const CLAVE = "gestor_tareas_uveg";
+const API_URL = "/api/tareas";
 
-let tareas = JSON.parse(localStorage.getItem(CLAVE) || "[]");
+let tareas = [];
 let filtroActual = "todas";
 
-function guardarTareas() {
-    localStorage.setItem(CLAVE, JSON.stringify(tareas));
+async function cargarTareas() {
+    try {
+        const respuesta = await fetch(API_URL);
+
+        if (!respuesta.ok) {
+            throw new Error("Error al consultar las tareas");
+        }
+
+        tareas = await respuesta.json();
+        mostrarTareas();
+    } catch (error) {
+        console.error(error);
+        mensajeVacio.textContent = "No se pudieron cargar las tareas.";
+        mensajeVacio.style.display = "block";
+    }
 }
 
 function actualizarEstadisticas() {
@@ -25,10 +38,9 @@ function actualizarEstadisticas() {
     ).length;
 
     completadas.textContent = tareas.filter(
-        tarea => tarea.completada
+        tarea => Boolean(tarea.completada)
     ).length;
 }
-
 
 function mostrarTareas() {
     lista.innerHTML = "";
@@ -39,12 +51,13 @@ function mostrarTareas() {
         }
 
         if (filtroActual === "completadas") {
-            return tarea.completada;
+            return Boolean(tarea.completada);
         }
 
         return true;
     });
 
+    mensajeVacio.textContent = "Todavía no hay tareas para mostrar.";
     mensajeVacio.style.display =
         filtradas.length === 0 ? "block" : "none";
 
@@ -58,30 +71,69 @@ function mostrarTareas() {
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.checked = tarea.completada;
+        checkbox.checked = Boolean(tarea.completada);
         checkbox.setAttribute(
             "aria-label",
             "Marcar tarea como completada"
         );
 
-        checkbox.addEventListener("change", () => {
-            tarea.completada = checkbox.checked;
-            guardarTareas();
-            mostrarTareas();
+        checkbox.addEventListener("change", async () => {
+            checkbox.disabled = true;
+
+            try {
+                const respuesta = await fetch(
+                    `${API_URL}/${tarea.id}`,
+                    {
+                        method: "PATCH",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            completada: checkbox.checked
+                        })
+                    }
+                );
+
+                if (!respuesta.ok) {
+                    throw new Error("Error al actualizar la tarea");
+                }
+
+                await cargarTareas();
+            } catch (error) {
+                console.error(error);
+                checkbox.checked = !checkbox.checked;
+                checkbox.disabled = false;
+                alert("No se pudo actualizar la tarea.");
+            }
         });
 
         const texto = document.createElement("span");
         texto.className = "texto-tarea";
-        texto.textContent = tarea.texto;
+        texto.textContent = tarea.descripcion;
 
         const eliminar = document.createElement("button");
         eliminar.className = "eliminar";
         eliminar.textContent = "Eliminar";
 
-        eliminar.addEventListener("click", () => {
-            tareas = tareas.filter(t => t.id !== tarea.id);
-            guardarTareas();
-            mostrarTareas();
+        eliminar.addEventListener("click", async () => {
+            eliminar.disabled = true;
+
+            try {
+                const respuesta = await fetch(
+                    `${API_URL}/${tarea.id}`,
+                    { method: "DELETE" }
+                );
+
+                if (!respuesta.ok) {
+                    throw new Error("Error al eliminar la tarea");
+                }
+
+                await cargarTareas();
+            } catch (error) {
+                console.error(error);
+                eliminar.disabled = false;
+                alert("No se pudo eliminar la tarea.");
+            }
         });
 
         elemento.append(checkbox, texto, eliminar);
@@ -91,28 +143,44 @@ function mostrarTareas() {
     actualizarEstadisticas();
 }
 
-formulario.addEventListener("submit", evento => {
+formulario.addEventListener("submit", async evento => {
     evento.preventDefault();
 
-    const texto = entrada.value.trim();
+    const descripcion = entrada.value.trim();
 
-    if (texto === "") {
+    if (!descripcion || descripcion.length > 100) {
+        alert("La tarea debe contener entre 1 y 100 caracteres.");
         return;
     }
 
-    const nuevaTarea = {
-        id: Date.now().toString() + Math.random().toString(36).slice(2),
-        texto: texto,
-        completada: false
-    };
+    const botonAgregar = formulario.querySelector(
+        'button[type="submit"]'
+    );
 
-    tareas.push(nuevaTarea);
+    if (botonAgregar) botonAgregar.disabled = true;
 
-    guardarTareas();
-    mostrarTareas();
+    try {
+        const respuesta = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ descripcion })
+        });
 
-    formulario.reset();
-    entrada.focus();
+        if (!respuesta.ok) {
+            throw new Error("Error al registrar la tarea");
+        }
+
+        formulario.reset();
+        await cargarTareas();
+        entrada.focus();
+    } catch (error) {
+        console.error(error);
+        alert("No se pudo guardar la tarea en MySQL.");
+    } finally {
+        if (botonAgregar) botonAgregar.disabled = false;
+    }
 });
 
 botonesFiltro.forEach(boton => {
@@ -128,4 +196,4 @@ botonesFiltro.forEach(boton => {
     });
 });
 
-mostrarTareas();
+cargarTareas();
